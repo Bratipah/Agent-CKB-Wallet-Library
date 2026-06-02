@@ -39,6 +39,6 @@ Any developer or business to deploy AI agents that can manage assets programmati
 - Build: esbuild (CJS bundle)
 
 
-[![Current Project Snapshot](https://vimeo.com/1197570387.png)](https://vimeo.com/1197570387?)
+![Current Project Snapshot](https://vimeo.com/1197570387?)
   
 

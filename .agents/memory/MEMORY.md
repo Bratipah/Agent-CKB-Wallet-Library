@@ -1,2 +1,0 @@
-- [Noble crypto v2 import quirks](noble-crypto-v2.md) — @noble/curves and @noble/hashes v2 require .js extension imports and have renamed APIs
-- [CKB DB lib rebuild requirement](ckb-db-rebuild.md) — composite lib must be rebuilt with typecheck:libs before api-server can see new schema exports

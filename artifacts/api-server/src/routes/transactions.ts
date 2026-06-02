@@ -11,15 +11,47 @@ import {
   ListTransactionsParams,
   ListTransactionsResponse,
 } from "@workspace/api-zod";
-import { addressToLockArgs, buildLockScript, signTxHash } from "../lib/ckb-wallet";
-import {
-  getLiveCells,
-  buildTransferTx,
-  sendTransaction,
-} from "../lib/ckb-rpc";
-import { checkSafetyRules, recordSpending } from "../lib/safety-checker";
+import { addressToLockArgs, buildLockScript, decryptPrivateKey, hexToBytes, bytesToHex } from "../lib/ckb-wallet.js";
+import { getLiveCells, buildTransferTx, sendTransaction, type CkbTransaction } from "../lib/ckb-rpc.js";
+import { checkSafetyRules, recordSpending } from "../lib/safety-checker.js";
+import { computeTxHash, serializeWitnessArgs, computeSigningMessage } from "../lib/ckb-molecule.js";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 
 const router: IRouter = Router();
+
+/**
+ * Sign a CKB transaction correctly:
+ * 1. Compute tx_hash from molecule-serialized RawTransaction
+ * 2. Build WitnessArgs placeholder (lock = 65 zero bytes)
+ * 3. Compute signing message = blake2b_256(tx_hash || u64LE(witness_len) || witness_bytes)
+ * 4. Sign with secp256k1, produce 65-byte recoverable sig [r(32)||s(32)||v(1)]
+ * 5. Replace witness placeholder lock with actual signature
+ */
+function signCkbTransaction(rawTx: CkbTransaction, encryptedPrivateKey: string): CkbTransaction {
+  const txHash = computeTxHash(rawTx);
+
+  // WitnessArgs placeholder: lock = 65 zero bytes
+  const lockPlaceholder = new Uint8Array(65);
+  const witnessBytes = serializeWitnessArgs(lockPlaceholder);
+  const signingMessage = computeSigningMessage(txHash, witnessBytes);
+
+  // Decrypt private key and sign
+  const privateKeyHex = decryptPrivateKey(encryptedPrivateKey);
+  const privateKeyBytes = hexToBytes(privateKeyHex);
+  const sig = secp256k1.sign(signingMessage, privateKeyBytes, { lowS: true });
+
+  // CKB expects 65-byte signature: r(32) || s(32) || recovery_id(1)
+  const sig65 = new Uint8Array(65);
+  sig65.set(sig.toCompactRawBytes(), 0);
+  sig65[64] = sig.recovery ?? 0;
+
+  // Build final WitnessArgs with actual signature
+  const finalWitnessBytes = serializeWitnessArgs(sig65);
+
+  const signedTx = { ...rawTx, witnesses: [...rawTx.witnesses] };
+  signedTx.witnesses[0] = bytesToHex(finalWitnessBytes);
+  return signedTx;
+}
 
 // POST /wallets/:id/transfer
 router.post("/wallets/:id/transfer", async (req, res): Promise<void> => {
@@ -34,7 +66,10 @@ router.post("/wallets/:id/transfer", async (req, res): Promise<void> => {
     return;
   }
 
-  const [wallet] = await db.select().from(agentWalletsTable).where(eq(agentWalletsTable.id, params.data.id));
+  const [wallet] = await db
+    .select()
+    .from(agentWalletsTable)
+    .where(eq(agentWalletsTable.id, params.data.id));
   if (!wallet) {
     res.status(404).json({ error: "Wallet not found" });
     return;
@@ -63,7 +98,9 @@ router.post("/wallets/:id/transfer", async (req, res): Promise<void> => {
   const cells = await getLiveCells(wallet.network, lockScript, 50);
 
   if (cells.length === 0) {
-    res.status(400).json({ error: "No cells available. Fund your wallet first." });
+    res.status(400).json({
+      error: "No cells found. Fund your wallet via the testnet faucet at https://faucet.nervos.org/",
+    });
     return;
   }
 
@@ -71,51 +108,60 @@ router.post("/wallets/:id/transfer", async (req, res): Promise<void> => {
   const toLockScript = buildLockScript(toLockArgs);
   const amountBig = BigInt(amount);
 
-  // Select input cells (simple greedy)
+  // Select input cells (greedy — only plain cells, skip type-scripted ones)
+  const MIN_CHANGE = BigInt(6100000000); // 61 CKB
+  const FEE_ESTIMATE = BigInt(1000);
   let collected = BigInt(0);
   const selectedCells = [];
   for (const cell of cells.filter((c) => !c.output.type)) {
     selectedCells.push(cell);
     collected += BigInt(cell.output.capacity);
-    if (collected >= amountBig + BigInt(6100000000) + BigInt(1000)) break;
+    if (collected >= amountBig + MIN_CHANGE + FEE_ESTIMATE) break;
   }
 
-  if (collected < amountBig) {
-    res.status(400).json({ error: `Insufficient balance. Have ${collected} shannons, need ${amount}` });
+  if (collected < amountBig + FEE_ESTIMATE) {
+    res.status(400).json({
+      error: `Insufficient balance. Available: ${(Number(collected) / 1e8).toFixed(4)} CKB, requested: ${(Number(amountBig) / 1e8).toFixed(4)} CKB`,
+    });
     return;
   }
 
-  const rawTx = buildTransferTx(selectedCells, toAddress, toLockScript, lockScript, amountBig, memo ?? "");
+  const rawTx = buildTransferTx(
+    selectedCells,
+    toAddress,
+    toLockScript,
+    lockScript,
+    amountBig,
+    memo ?? "",
+  );
 
-  // Sign the transaction
-  // For CKB, we sign the transaction hash (simplified: hash of serialized tx)
-  // Using a simplified approach: compute a mock tx hash for demo, then sign
-  const txHashPlaceholder = "0x" + "00".repeat(32); // Real impl: serialize + blake2b
-  const signature = signTxHash(txHashPlaceholder, wallet.encryptedPrivateKey);
-  rawTx.witnesses[0] = "0x5500000010000000550000005500000041000000" + signature.slice(2);
+  // Sign with proper molecule tx hash
+  const signedTx = signCkbTransaction(rawTx, wallet.encryptedPrivateKey);
+  const txHash = computeTxHash(rawTx);
 
-  let txHash: string;
-  let status: string;
+  let broadcastedHash: string = txHash;
+  let status = "signed";
+
   try {
-    txHash = await sendTransaction(wallet.network, rawTx);
+    broadcastedHash = await sendTransaction(wallet.network, signedTx);
     status = "pending";
     await recordSpending(wallet.id, amount);
+    req.log.info({ txHash: broadcastedHash }, "CKB transfer broadcast");
   } catch (err) {
-    txHash = txHashPlaceholder;
-    status = "pending";
-    req.log.warn({ err }, "CKB node unreachable, recording as pending");
+    req.log.warn({ err, txHash }, "CKB node rejected/unreachable, transaction signed but not broadcast");
+    status = "signed_not_broadcast";
   }
 
   await db.insert(auditLogTable).values({
     walletId: wallet.id,
     action: "transfer",
-    txHash,
+    txHash: broadcastedHash,
     amountShannons: amount,
-    status: "success",
-    details: { toAddress, memo: memo ?? null },
+    status: status === "pending" ? "success" : "failed",
+    details: { toAddress, memo: memo ?? null, status },
   });
 
-  res.json(TransferCkbResponse.parse({ txHash, status, message: null }));
+  res.json(TransferCkbResponse.parse({ txHash: broadcastedHash, status, message: null }));
 });
 
 // POST /wallets/:id/sign
@@ -131,7 +177,10 @@ router.post("/wallets/:id/sign", async (req, res): Promise<void> => {
     return;
   }
 
-  const [wallet] = await db.select().from(agentWalletsTable).where(eq(agentWalletsTable.id, params.data.id));
+  const [wallet] = await db
+    .select()
+    .from(agentWalletsTable)
+    .where(eq(agentWalletsTable.id, params.data.id));
   if (!wallet) {
     res.status(404).json({ error: "Wallet not found" });
     return;
@@ -150,22 +199,26 @@ router.post("/wallets/:id/sign", async (req, res): Promise<void> => {
     return;
   }
 
-  // Sign the transaction
-  const txHashPlaceholder = "0x" + "00".repeat(32);
-  const signature = signTxHash(txHashPlaceholder, wallet.encryptedPrivateKey);
-  const rawTx = body.data.rawTx as Record<string, unknown>;
-  if (Array.isArray(rawTx.witnesses) && rawTx.witnesses.length > 0) {
-    rawTx.witnesses[0] = "0x5500000010000000550000005500000041000000" + signature.slice(2);
-  }
+  const rawTx = body.data.rawTx as CkbTransaction;
+  const txHash = computeTxHash(rawTx);
+  const signedTx = signCkbTransaction(rawTx, wallet.encryptedPrivateKey);
 
   await db.insert(auditLogTable).values({
     walletId: wallet.id,
     action: "sign",
+    txHash,
     status: "success",
     details: { signedAt: new Date().toISOString() },
   });
 
-  res.json(SignTransactionResponse.parse({ txHash: txHashPlaceholder, status: "pending", message: "Transaction signed" }));
+  res.json(
+    SignTransactionResponse.parse({
+      txHash,
+      status: "signed",
+      message: "Transaction signed with secp256k1",
+      signedTx,
+    }),
+  );
 });
 
 // GET /wallets/:id/transactions
@@ -175,7 +228,10 @@ router.get("/wallets/:id/transactions", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [wallet] = await db.select().from(agentWalletsTable).where(eq(agentWalletsTable.id, params.data.id));
+  const [wallet] = await db
+    .select()
+    .from(agentWalletsTable)
+    .where(eq(agentWalletsTable.id, params.data.id));
   if (!wallet) {
     res.status(404).json({ error: "Wallet not found" });
     return;

@@ -4,7 +4,7 @@ A full-stack programmable wallet system for AI agents on the Nervos CKB blockcha
 Any developer or business to deploy AI agents that can manage assets programmatically without risking catastrophic financial loss
 
 
-![Wallet Library](images/screenshot.png)
+![Wallet Library](https://github.com/Bratipah/Agent-CKB-Wallet-Library/blob/main/assets/Screenshot%20from%202026-06-02%2004-34-03.png)
 
 
 ## Customers 
@@ -39,5 +39,5 @@ Any developer or business to deploy AI agents that can manage assets programmati
 - Build: esbuild (CJS bundle)
 
 
-[![Video Title]](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)   
+[![Current Project Snapshot]](https://github.com/Bratipah/Agent-CKB-Wallet-Library/blob/main/assets/Screencast%20from%202026-06-02%2004-34-19.webm)   
 

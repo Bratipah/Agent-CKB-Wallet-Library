@@ -4,6 +4,9 @@ A full-stack programmable wallet system for AI agents on the Nervos CKB blockcha
 Any developer or business to deploy AI agents that can manage assets programmatically without risking catastrophic financial loss
 
 
+![Wallet Library](images/screenshot.png)
+
+
 ## Customers 
 - **Trading Firms**: Algorithmic trading bots requiring secure key management
 - **Game Studios**: In-game AI characters managing virtual economies
@@ -34,4 +37,7 @@ Any developer or business to deploy AI agents that can manage assets programmati
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
+
+
+[![Video Title]](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)   
 

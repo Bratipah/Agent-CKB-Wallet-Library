@@ -7,6 +7,8 @@ out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
+.replitignore
+.replit
 
 # dependencies
 node_modules

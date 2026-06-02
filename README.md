@@ -39,5 +39,5 @@ Any developer or business to deploy AI agents that can manage assets programmati
 - Build: esbuild (CJS bundle)
 
 
-[![Current Project Snapshot]](https://github.com/Bratipah/Agent-CKB-Wallet-Library/blob/main/assets/Screencast%20from%202026-06-02%2004-34-19.webm)   
+![Current Project Snapshot](https://github.com/Bratipah/Agent-CKB-Wallet-Library/blob/main/assets/Screencast%20from%202026-06-02%2004-34-19.webm)   
 

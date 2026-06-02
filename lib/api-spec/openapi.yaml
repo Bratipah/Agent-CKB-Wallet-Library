@@ -3,13 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CKB Agent Wallet Library API — programmable wallet for AI agents
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: wallets
+    description: Agent wallet management
+  - name: cells
+    description: Cell management
+  - name: transactions
+    description: Transaction operations
+  - name: safety
+    description: Safety rails management
+  - name: fiber
+    description: Fiber payment channels
+  - name: dobs
+    description: Digital Objects (DOBs / NFTs)
+  - name: otx
+    description: Open Transaction intents
+  - name: audit
+    description: Audit log
+
 paths:
   /healthz:
     get:
@@ -24,6 +41,540 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Wallets ───────────────────────────────────────────────────────────────
+  /wallets:
+    get:
+      operationId: listWallets
+      tags: [wallets]
+      summary: List all agent wallets
+      responses:
+        "200":
+          description: List of wallets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentWallet"
+    post:
+      operationId: createWallet
+      tags: [wallets]
+      summary: Create a new agent wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletInput"
+      responses:
+        "201":
+          description: Wallet created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWallet"
+
+  /wallets/{id}:
+    get:
+      operationId: getWallet
+      tags: [wallets]
+      summary: Get a wallet by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Wallet found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWallet"
+        "404":
+          description: Wallet not found
+    delete:
+      operationId: deleteWallet
+      tags: [wallets]
+      summary: Delete a wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /wallets/{id}/balance:
+    get:
+      operationId: getWalletBalance
+      tags: [wallets]
+      summary: Get wallet balance from CKB node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Balance info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBalance"
+        "404":
+          description: Wallet not found
+
+  # ── Cells ─────────────────────────────────────────────────────────────────
+  /wallets/{id}/cells:
+    get:
+      operationId: listCells
+      tags: [cells]
+      summary: List live cells owned by the wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of cells
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cell"
+        "404":
+          description: Wallet not found
+
+  # ── Transactions ──────────────────────────────────────────────────────────
+  /wallets/{id}/transfer:
+    post:
+      operationId: transferCkb
+      tags: [transactions]
+      summary: Transfer CKB to another address (safety rails enforced)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferInput"
+      responses:
+        "200":
+          description: Transaction sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+        "400":
+          description: Bad request or safety rail violation
+        "404":
+          description: Wallet not found
+
+  /wallets/{id}/sign:
+    post:
+      operationId: signTransaction
+      tags: [transactions]
+      summary: Sign a raw CKB transaction (safety rails enforced)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignTxInput"
+      responses:
+        "200":
+          description: Signed transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+        "400":
+          description: Safety rail violation
+        "404":
+          description: Wallet not found
+
+  /wallets/{id}/transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      summary: List transaction history for wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TxRecord"
+        "404":
+          description: Wallet not found
+
+  # ── Safety Rails ──────────────────────────────────────────────────────────
+  /wallets/{id}/safety:
+    get:
+      operationId: getSafetyRules
+      tags: [safety]
+      summary: Get safety rules for wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Safety rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyRules"
+        "404":
+          description: Wallet not found
+    put:
+      operationId: updateSafetyRules
+      tags: [safety]
+      summary: Update safety rules for wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SafetyRulesUpdate"
+      responses:
+        "200":
+          description: Updated rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyRules"
+        "404":
+          description: Wallet not found
+
+  /wallets/{id}/kill:
+    post:
+      operationId: activateKillSwitch
+      tags: [safety]
+      summary: Activate kill switch — disables all agent operations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Kill switch activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWallet"
+        "404":
+          description: Wallet not found
+
+  /wallets/{id}/restore:
+    post:
+      operationId: restoreWallet
+      tags: [safety]
+      summary: Restore wallet after kill switch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Wallet restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWallet"
+        "404":
+          description: Wallet not found
+
+  # ── Fiber Channels ────────────────────────────────────────────────────────
+  /wallets/{id}/fiber/channels:
+    get:
+      operationId: listFiberChannels
+      tags: [fiber]
+      summary: List Fiber payment channels
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FiberChannel"
+    post:
+      operationId: openFiberChannel
+      tags: [fiber]
+      summary: Open a Fiber payment channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FiberChannelInput"
+      responses:
+        "201":
+          description: Channel opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiberChannel"
+
+  /wallets/{id}/fiber/channels/{channelId}:
+    delete:
+      operationId: closeFiberChannel
+      tags: [fiber]
+      summary: Close a Fiber payment channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Channel closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiberChannel"
+        "404":
+          description: Channel not found
+
+  /wallets/{id}/fiber/pay:
+    post:
+      operationId: fiberPay
+      tags: [fiber]
+      summary: Make a Fiber network payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FiberPaymentInput"
+      responses:
+        "200":
+          description: Payment sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TxResult"
+
+  # ── DOBs ──────────────────────────────────────────────────────────────────
+  /wallets/{id}/dobs:
+    get:
+      operationId: listDobs
+      tags: [dobs]
+      summary: List minted Digital Objects owned by wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of DOBs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DobAsset"
+    post:
+      operationId: mintDob
+      tags: [dobs]
+      summary: Mint a new Digital Object (DOB/NFT)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DobMintInput"
+      responses:
+        "201":
+          description: DOB minted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DobAsset"
+
+  # ── OTX Intents ───────────────────────────────────────────────────────────
+  /wallets/{id}/otx:
+    get:
+      operationId: listOtxIntents
+      tags: [otx]
+      summary: List OTX intents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of OTX intents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OtxIntent"
+    post:
+      operationId: composeOtxIntent
+      tags: [otx]
+      summary: Compose an Open Transaction intent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtxIntentInput"
+      responses:
+        "201":
+          description: Intent composed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtxIntent"
+
+  /wallets/{id}/otx/{intentId}/finalize:
+    post:
+      operationId: finalizeOtxIntent
+      tags: [otx]
+      summary: Finalize and broadcast an OTX intent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: intentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Intent finalized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtxIntent"
+        "404":
+          description: Intent not found
+
+  # ── Audit Log ─────────────────────────────────────────────────────────────
+  /wallets/{id}/audit:
+    get:
+      operationId: listAuditLog
+      tags: [audit]
+      summary: Get audit log for wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLogEntry"
+        "404":
+          description: Wallet not found
+
+  # ── Stats (dashboard) ─────────────────────────────────────────────────────
+  /stats:
+    get:
+      operationId: getStats
+      tags: [wallets]
+      summary: Get aggregate stats for the dashboard
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +585,393 @@ components:
       required:
         - status
 
+    # ── Wallet ──────────────────────────────────────────────────────────────
+    AgentWallet:
+      type: object
+      required: [id, name, address, publicKey, network, status, isKilled, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+          description: CKB address (secp256k1-based)
+        publicKey:
+          type: string
+          description: Hex-encoded compressed public key
+        network:
+          type: string
+          enum: [mainnet, testnet]
+        status:
+          type: string
+          enum: [active, killed]
+        isKilled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WalletInput:
+      type: object
+      required: [name, network]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        network:
+          type: string
+          enum: [mainnet, testnet]
+        passphrase:
+          type: string
+          description: Passphrase for encrypting the private key. If omitted, uses server default.
+
+    WalletBalance:
+      type: object
+      required: [walletId, address, totalCapacity, freeCapacity, cellCount]
+      properties:
+        walletId:
+          type: integer
+        address:
+          type: string
+        totalCapacity:
+          type: string
+          description: Total capacity in shannons (1 CKB = 100,000,000 shannons)
+        freeCapacity:
+          type: string
+          description: Spendable capacity in shannons
+        cellCount:
+          type: integer
+
+    # ── Cells ───────────────────────────────────────────────────────────────
+    Script:
+      type: object
+      required: [codeHash, hashType, args]
+      properties:
+        codeHash:
+          type: string
+        hashType:
+          type: string
+          enum: [data, type, data1, data2]
+        args:
+          type: string
+
+    Cell:
+      type: object
+      required: [txHash, index, capacity, lockScript]
+      properties:
+        txHash:
+          type: string
+        index:
+          type: string
+        capacity:
+          type: string
+          description: Capacity in shannons
+        lockScript:
+          $ref: "#/components/schemas/Script"
+        typeScript:
+          $ref: "#/components/schemas/Script"
+        data:
+          type: string
+          description: Hex-encoded cell data
+
+    # ── Transactions ────────────────────────────────────────────────────────
+    TransferInput:
+      type: object
+      required: [toAddress, amount]
+      properties:
+        toAddress:
+          type: string
+          description: Recipient CKB address
+        amount:
+          type: string
+          description: Amount in shannons
+        memo:
+          type: string
+          description: Optional memo attached as cell data
+
+    SignTxInput:
+      type: object
+      required: [rawTx]
+      properties:
+        rawTx:
+          type: object
+          description: Raw CKB transaction JSON to sign
+          additionalProperties: true
+
+    TxResult:
+      type: object
+      required: [txHash, status]
+      properties:
+        txHash:
+          type: string
+        status:
+          type: string
+          enum: [pending, committed, rejected]
+        message:
+          type: ["string", "null"]
+
+    TxRecord:
+      type: object
+      required: [id, walletId, action, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        action:
+          type: string
+        txHash:
+          type: ["string", "null"]
+        amountShannons:
+          type: ["string", "null"]
+        status:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Safety Rails ────────────────────────────────────────────────────────
+    SafetyRules:
+      type: object
+      required: [id, walletId, isActive, allowedActions, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        maxTransferAmountShannons:
+          type: ["string", "null"]
+          description: Max CKB per single transfer (shannons)
+        dailySpendingLimitShannons:
+          type: ["string", "null"]
+          description: Max daily spending in shannons
+        dailySpentShannons:
+          type: string
+          description: Amount spent today in shannons
+        allowedActions:
+          type: array
+          items:
+            type: string
+          description: "Allowed actions: transfer, sign, fiber_open, fiber_pay, dob_mint, otx_compose"
+        addressWhitelist:
+          type: array
+          items:
+            type: string
+          description: If non-empty, only these addresses can receive funds
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SafetyRulesUpdate:
+      type: object
+      properties:
+        maxTransferAmountShannons:
+          type: ["string", "null"]
+        dailySpendingLimitShannons:
+          type: ["string", "null"]
+        allowedActions:
+          type: array
+          items:
+            type: string
+        addressWhitelist:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    # ── Fiber ───────────────────────────────────────────────────────────────
+    FiberChannel:
+      type: object
+      required: [id, walletId, peerAddress, localCapacityShannons, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        channelId:
+          type: ["string", "null"]
+          description: On-chain channel ID (hex)
+        peerAddress:
+          type: string
+        localCapacityShannons:
+          type: string
+        remoteCapacityShannons:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, open, closing, closed]
+        txHash:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    FiberChannelInput:
+      type: object
+      required: [peerAddress, localCapacityShannons]
+      properties:
+        peerAddress:
+          type: string
+          description: Peer node address (multiaddr format)
+        localCapacityShannons:
+          type: string
+          description: Local commitment capacity in shannons
+
+    FiberPaymentInput:
+      type: object
+      required: [invoice, amountShannons]
+      properties:
+        invoice:
+          type: string
+          description: Fiber payment invoice (fiber:...)
+        amountShannons:
+          type: string
+        channelId:
+          type: ["string", "null"]
+          description: Optional specific channel to use
+
+    # ── DOBs ────────────────────────────────────────────────────────────────
+    DobAsset:
+      type: object
+      required: [id, walletId, name, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        tokenId:
+          type: ["string", "null"]
+          description: On-chain token ID
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        contentType:
+          type: ["string", "null"]
+        content:
+          type: ["string", "null"]
+          description: Base64-encoded content or URI
+        clusterName:
+          type: ["string", "null"]
+        txHash:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, minted, burned]
+        createdAt:
+          type: string
+          format: date-time
+
+    DobMintInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        contentType:
+          type: string
+          description: "MIME type, e.g. text/plain, image/png"
+        content:
+          type: string
+          description: Base64-encoded content or URI
+        clusterName:
+          type: string
+          description: Optional cluster/collection name
+
+    # ── OTX ─────────────────────────────────────────────────────────────────
+    OtxIntent:
+      type: object
+      required: [id, walletId, intentType, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        intentType:
+          type: string
+          description: "e.g. swap, transfer, lock"
+        intentData:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, finalized, failed]
+        txHash:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    OtxIntentInput:
+      type: object
+      required: [intentType, intentData]
+      properties:
+        intentType:
+          type: string
+        intentData:
+          type: object
+          additionalProperties: true
+          description: Partial transaction data for composing the OTX
+
+    # ── Audit Log ───────────────────────────────────────────────────────────
+    AuditLogEntry:
+      type: object
+      required: [id, walletId, action, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletId:
+          type: integer
+        action:
+          type: string
+        txHash:
+          type: ["string", "null"]
+        amountShannons:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [success, blocked, failed]
+        blockedReason:
+          type: ["string", "null"]
+        details:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Dashboard ───────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalWallets, activeWallets, killedWallets, totalTransactions, blockedTransactions, openChannels, mintedDobs]
+      properties:
+        totalWallets:
+          type: integer
+        activeWallets:
+          type: integer
+        killedWallets:
+          type: integer
+        totalTransactions:
+          type: integer
+        blockedTransactions:
+          type: integer
+        openChannels:
+          type: integer
+        mintedDobs:
+          type: integer
